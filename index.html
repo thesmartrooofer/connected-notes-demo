@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connected Notes Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Basic styling for a cleaner look */
+        body {
+            font-family: 'Inter', sans-serif; /* Tailwind's default sans-serif is often Inter */
+        }
+        .modal {
+            display: none; /* Hidden by default */
+        }
+        .modal.active {
+            display: flex; /* Show when active */
+        }
+        /* Ensure content within markdown is styled reasonably */
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 {
+            font-weight: bold;
+            margin-top: 0.5em;
+            margin-bottom: 0.25em;
+        }
+        .markdown-content h1 { font-size: 1.5em; }
+        .markdown-content h2 { font-size: 1.25em; }
+        .markdown-content h3 { font-size: 1.1em; }
+        .markdown-content p { margin-bottom: 0.5em; }
+        .markdown-content ul, .markdown-content ol { margin-left: 1.5em; margin-bottom: 0.5em; list-style: revert;}
+        .markdown-content a { color: #3b82f6; text-decoration: underline; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen flex flex-col">
+
+    <header class="bg-slate-800 text-white p-4 shadow-md">
+        <h1 class="text-2xl font-semibold flex items-center"><i class="fas fa-project-diagram mr-3"></i>Connected Notes Demo</h1>
+    </header>
+
+    <div class="flex-grow flex overflow-hidden">
+        <aside class="w-1/3 lg:w-1/4 bg-slate-700 text-white p-4 space-y-6 overflow-y-auto">
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-xl font-semibold">Notes</h2>
+                    <button id="addNoteBtn" class="bg-sky-500 hover:bg-sky-600 text-white px-3 py-1 rounded-md text-sm flex items-center">
+                        <i class="fas fa-plus mr-1"></i> Add Note
+                    </button>
+                </div>
+                <ul id="notesList" class="space-y-1 text-sm">
+                    <li class="p-2 rounded-md text-gray-400">No notes yet.</li>
+                </ul>
+            </div>
+
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-xl font-semibold">Sources</h2>
+                    <button id="addSourceBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-md text-sm flex items-center">
+                        <i class="fas fa-plus mr-1"></i> Add Source
+                    </button>
+                </div>
+                <ul id="sourcesList" class="space-y-1 text-sm">
+                    <li class="p-2 rounded-md text-gray-400">No sources yet.</li>
+                </ul>
+            </div>
+        </aside>
+
+        <main id="contentPane" class="flex-grow p-6 bg-white overflow-y-auto">
+            <div id="welcomeMessage" class="text-center text-gray-500">
+                <i class="fas fa-hand-sparkles fa-3x mb-4"></i>
+                <p class="text-xl">Welcome to Connected Notes!</p>
+                <p>Select a note or source from the sidebar, or create a new one to get started.</p>
+            </div>
+            <div id="itemDisplay" class="hidden space-y-4">
+                </div>
+        </main>
+    </div>
+
+    <div id="noteModal" class="modal fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="noteModalTitle" class="text-2xl font-semibold text-slate-700">Add New Note</h3>
+                <button id="closeNoteModalBtn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <form id="noteForm" class="space-y-4 overflow-y-auto pr-2">
+                <input type="hidden" id="noteId">
+                <div>
+                    <label for="noteTitle" class="block text-sm font-medium text-gray-700">Title</label>
+                    <input type="text" id="noteTitle" name="noteTitle" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="noteContent" class="block text-sm font-medium text-gray-700">Content (Markdown supported)</label>
+                    <textarea id="noteContent" name="noteContent" rows="8" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Link to Notes</label>
+                    <div id="linkToNotesContainer" class="mt-1 max-h-32 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-1">
+                        </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Link to Sources</label>
+                    <div id="linkToSourcesContainer" class="mt-1 max-h-32 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-1">
+                        </div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" id="cancelNoteBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-sky-600 hover:bg-sky-700 rounded-md flex items-center">
+                        <i class="fas fa-save mr-2"></i>Save Note
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="sourceModal" class="modal fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="sourceModalTitle" class="text-2xl font-semibold text-slate-700">Add New Source</h3>
+                <button id="closeSourceModalBtn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <form id="sourceForm" class="space-y-4 overflow-y-auto pr-2">
+                <input type="hidden" id="sourceId">
+                <div>
+                    <label for="sourceTitle" class="block text-sm font-medium text-gray-700">Title</label>
+                    <input type="text" id="sourceTitle" name="sourceTitle" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="sourceType" class="block text-sm font-medium text-gray-700">Type</label>
+                    <select id="sourceType" name="sourceType" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                        <option>URL</option>
+                        <option>Document</option>
+                        <option>Text Snippet</option>
+                        <option>Book</option>
+                        <option>Article</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="sourceContent" class="block text-sm font-medium text-gray-700">Content/Description (Markdown)</label>
+                    <textarea id="sourceContent" name="sourceContent" rows="5" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="Summary, key text, or brief description..."></textarea>
+                </div>
+                 <div>
+                    <label for="sourceLocation" class="block text-sm font-medium text-gray-700">Location (Optional URL/Reference)</label>
+                    <input type="text" id="sourceLocation" name="sourceLocation" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="e.g., https://example.com or 'Chapter 3'">
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" id="cancelSourceBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-md">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md flex items-center">
+                        <i class="fas fa-save mr-2"></i>Save Source
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="messageArea" class="fixed bottom-4 right-4 bg-slate-800 text-white p-3 rounded-md shadow-lg text-sm z-50 hidden transition-opacity duration-300">
+        <p id="messageText"></p>
+    </div>
+
+
+    <script>
+        // --- DATABASE SETUP (Dexie.js) ---
+        /**
+         * @type {Dexie} db - Dexie database instance for 'connectedNotesDB'.
+         * Defines 'notes' and 'sources' object stores with their respective schemas and indexes.
+         */
+        const db = new Dexie('connectedNotesDB');
+        db.version(1).stores({
+            notes: '++id, title, content, createdAt, updatedAt, *linkedNoteIds, *linkedSourceIds', // Changed & to * for multiEntry for Dexie 3.x syntax
+            sources: '++id, title, type, content, location, createdAt, updatedAt'
+            // TODO: Consider adding full-text search indexing if performance becomes an issue with many notes/sources.
+        });
+
+        // --- DOM ELEMENTS CACHING ---
+        // Caching frequently accessed DOM elements for performance and cleaner code.
+        const notesListEl = document.getElementById('notesList');
+        const sourcesListEl = document.getElementById('sourcesList');
+        const contentPaneEl = document.getElementById('contentPane');
+        const welcomeMessageEl = document.getElementById('welcomeMessage');
+        const itemDisplayEl = document.getElementById('itemDisplay');
+
+        // Modals & Forms Elements
+        const noteModal = document.getElementById('noteModal');
+        const noteForm = document.getElementById('noteForm');
+        const noteModalTitle = document.getElementById('noteModalTitle');
+        const noteIdInput = document.getElementById('noteId'); // Hidden input for note ID
+        const noteTitleInput = document.getElementById('noteTitle');
+        const noteContentInput = document.getElementById('noteContent');
+        const linkToNotesContainer = document.getElementById('linkToNotesContainer');
+        const linkToSourcesContainer = document.getElementById('linkToSourcesContainer');
+
+        const sourceModal = document.getElementById('sourceModal');
+        const sourceForm = document.getElementById('sourceForm');
+        const sourceModalTitle = document.getElementById('sourceModalTitle');
+        const sourceIdInput = document.getElementById('sourceId'); // Hidden input for source ID
+        const sourceTitleInput = document.getElementById('sourceTitle');
+        const sourceTypeInput = document.getElementById('sourceType');
+        const sourceContentInput = document.getElementById('sourceContent');
+        const sourceLocationInput = document.getElementById('sourceLocation');
+        
+        // Message Area Elements
+        const messageAreaEl = document.getElementById('messageArea');
+        const messageTextEl = document.getElementById('messageText');
+        let messageTimeout; // Timeout ID for hiding messages
+
+        // --- UTILITY FUNCTIONS ---
+
+        /**
+         * Displays a temporary feedback message to the user.
+         * @param {string} message - The message to display.
+         * @param {'success' | 'error'} type - The type of message ('success' or 'error'), affects styling.
+         */
+        function showMessage(message, type = 'success') {
+            messageTextEl.textContent = message;
+            messageAreaEl.classList.remove('hidden', 'bg-red-500', 'bg-slate-800', 'opacity-0');
+            
+            if (type === 'error') {
+                messageAreaEl.classList.add('bg-red-500');
+            } else {
+                messageAreaEl.classList.add('bg-slate-800');
+            }
+            messageAreaEl.classList.add('opacity-100'); // Fade in
+            
+            clearTimeout(messageTimeout); // Clear any existing timeout
+            messageTimeout = setTimeout(() => {
+                messageAreaEl.classList.remove('opacity-100');
+                messageAreaEl.classList.add('opacity-0'); // Fade out
+                setTimeout(() => messageAreaEl.classList.add('hidden'), 300); // Hide after fade animation
+            }, 3000); // Message visible for 3 seconds
+        }
+        
+        /**
+         * Formats an ISO date string into a more readable format.
+         * @param {string} dateString - An ISO 8601 date string.
+         * @returns {string} A formatted date string (e.g., "May 13, 2025, 04:20 PM") or 'N/A' if input is invalid.
+         */
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            try {
+                return new Date(dateString).toLocaleDateString(navigator.language || 'en-US', { 
+                    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                });
+            } catch (e) {
+                console.warn("Error formatting date:", dateString, e);
+                return 'Invalid Date';
+            }
+        }
+
+        // --- MODAL HANDLING ---
+
+        /**
+         * Opens the note modal, optionally pre-filling it with existing note data for editing.
+         * @param {object | null} note - The note object to edit, or null for a new note.
+         */
+        function openNoteModal(note = null) {
+            noteForm.reset(); // Clear previous form data
+            if (note) {
+                // Editing existing note
+                noteModalTitle.textContent = 'Edit Note';
+                noteIdInput.value = note.id;
+                noteTitleInput.value = note.title;
+                noteContentInput.value = note.content;
+                // Links are populated by populateLinkCheckboxes
+            } else {
+                // Adding new note
+                noteModalTitle.textContent = 'Add New Note';
+                noteIdInput.value = ''; // Ensure ID is cleared for new notes
+            }
+            // Populate link checkboxes based on current note's links or empty for new note
+            populateLinkCheckboxes(note ? note.linkedNoteIds : [], note ? note.linkedSourceIds : [], note ? note.id : null);
+            noteModal.classList.add('active');
+            // TODO: Consider focusing the first input field (noteTitleInput) when modal opens for better UX.
+        }
+
+        /**
+         * Closes the note modal.
+         */
+        function closeNoteModal() {
+            noteModal.classList.remove('active');
+        }
+
+        /**
+         * Opens the source modal, optionally pre-filling it with existing source data for editing.
+         * @param {object | null} source - The source object to edit, or null for a new source.
+         */
+        function openSourceModal(source = null) {
+            sourceForm.reset(); // Clear previous form data
+            if (source) {
+                // Editing existing source
+                sourceModalTitle.textContent = 'Edit Source';
+                sourceIdInput.value = source.id;
+                sourceTitleInput.value = source.title;
+                sourceTypeInput.value = source.type;
+                sourceContentInput.value = source.content || '';
+                sourceLocationInput.value = source.location || '';
+            } else {
+                // Adding new source
+                sourceModalTitle.textContent = 'Add New Source';
+                sourceIdInput.value = ''; // Ensure ID is cleared for new sources
+            }
+            sourceModal.classList.add('active');
+            // TODO: Consider focusing the first input field (sourceTitleInput) when modal opens.
+        }
+
+        /**
+         * Closes the source modal.
+         */
+        function closeSourceModal() {
+            sourceModal.classList.remove('active');
+        }
+
+        // --- DATA RENDERING ---
+
+        /**
+         * Fetches notes from the database and renders them in the sidebar list.
+         * Notes are sorted by 'updatedAt' in descending order.
+         */
+        async function renderNotesList() {
+            try {
+                // Fetch notes, ordered by most recently updated
+                const notes = await db.notes.orderBy('updatedAt').reverse().toArray();
+                notesListEl.innerHTML = ''; // Clear existing list items
+                if (notes.length === 0) {
+                    notesListEl.innerHTML = '<li class="p-2 rounded-md text-gray-400">No notes yet.</li>';
+                    return;
+                }
+                notes.forEach(note => {
+                    const li = document.createElement('li');
+                    li.className = 'p-2 hover:bg-slate-600 rounded-md cursor-pointer transition-colors duration-150';
+                    li.textContent = note.title || 'Untitled Note';
+                    li.dataset.id = note.id; // Store ID for click handling
+                    li.addEventListener('click', () => displayItem('note', note.id));
+                    notesListEl.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Error rendering notes list:", error);
+                showMessage("Failed to load notes from the database.", "error");
+                // TODO: Implement more robust UI feedback for DB errors, e.g., a persistent error message in the sidebar.
+            }
+        }
+
+        /**
+         * Fetches sources from the database and renders them in the sidebar list.
+         * Sources are sorted by 'updatedAt' in descending order.
+         */
+        async function renderSourcesList() {
+            try {
+                // Fetch sources, ordered by most recently updated
+                const sources = await db.sources.orderBy('updatedAt').reverse().toArray();
+                sourcesListEl.innerHTML = ''; // Clear existing list items
+                if (sources.length === 0) {
+                    sourcesListEl.innerHTML = '<li class="p-2 rounded-md text-gray-400">No sources yet.</li>';
+                    return;
+                }
+                sources.forEach(source => {
+                    const li = document.createElement('li');
+                    li.className = 'p-2 hover:bg-slate-600 rounded-md cursor-pointer transition-colors duration-150';
+                    li.textContent = source.title || 'Untitled Source';
+                    li.dataset.id = source.id; // Store ID for click handling
+                    li.addEventListener('click', () => displayItem('source', source.id));
+                    sourcesListEl.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Error rendering sources list:", error);
+                showMessage("Failed to load sources from the database.", "error");
+            }
+        }
+        
+        /**
+         * Populates the link selection checkboxes in the note modal.
+         * Fetches all notes and sources to create checkboxes for linking.
+         * @param {number[]} [currentLinkedNoteIds=[]] - Array of IDs of notes currently linked to the note being edited.
+         * @param {number[]} [currentLinkedSourceIds=[]] - Array of IDs of sources currently linked to the note being edited.
+         * @param {number | null} [currentNoteId=null] - The ID of the note currently being edited (to prevent self-linking).
+         */
+        async function populateLinkCheckboxes(currentLinkedNoteIds = [], currentLinkedSourceIds = [], currentNoteId = null) {
+            linkToNotesContainer.innerHTML = '<p class="text-xs text-gray-400">Loading available notes...</p>';
+            linkToSourcesContainer.innerHTML = '<p class="text-xs text-gray-400">Loading available sources...</p>';
+
+            try {
+                const allNotes = await db.notes.toArray();
+                const allSources = await db.sources.toArray();
+
+                // Populate checkboxes for linking to other notes
+                linkToNotesContainer.innerHTML = ''; // Clear loading message
+                const availableNotesToLink = allNotes.filter(note => note.id !== currentNoteId); // Exclude self
+                if (availableNotesToLink.length === 0) {
+                    linkToNotesContainer.innerHTML = '<p class="text-xs text-gray-500">No other notes available to link.</p>';
+                } else {
+                    availableNotesToLink.forEach(note => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `link-note-${note.id}`;
+                        checkbox.value = note.id;
+                        checkbox.checked = currentLinkedNoteIds.includes(note.id);
+                        checkbox.className = 'h-4 w-4 text-sky-600 border-gray-300 rounded focus:ring-sky-500 mr-2';
+                        
+                        const label = document.createElement('label');
+                        label.htmlFor = `link-note-${note.id}`;
+                        label.textContent = note.title || 'Untitled Note';
+                        label.className = 'text-sm text-gray-700 select-none'; // `select-none` to prevent text selection on label click
+                        
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+                        linkToNotesContainer.appendChild(div);
+                    });
+                }
+                // TODO: Add a search/filter input for long lists of notes/sources in the link selection.
+
+                // Populate checkboxes for linking to sources
+                linkToSourcesContainer.innerHTML = ''; // Clear loading message
+                if (allSources.length === 0) {
+                    linkToSourcesContainer.innerHTML = '<p class="text-xs text-gray-500">No sources available to link.</p>';
+                } else {
+                    allSources.forEach(source => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = `link-source-${source.id}`;
+                        checkbox.value = source.id;
+                        checkbox.checked = currentLinkedSourceIds.includes(source.id);
+                        checkbox.className = 'h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 mr-2';
+
+                        const label = document.createElement('label');
+                        label.htmlFor = `link-source-${source.id}`;
+                        label.textContent = source.title || 'Untitled Source';
+                        label.className = 'text-sm text-gray-700 select-none';
+                        
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+                        linkToSourcesContainer.appendChild(div);
+                    });
+                }
+
+            } catch (error) {
+                console.error("Error populating link checkboxes:", error);
+                linkToNotesContainer.innerHTML = '<p class="text-xs text-red-500">Error loading notes to link.</p>';
+                linkToSourcesContainer.innerHTML = '<p class="text-xs text-red-500">Error loading sources to link.</p>';
+                showMessage("Could not load items for linking.", "error");
+            }
+        }
+
+        /**
+         * Displays the details of a selected note or source in the main content pane.
+         * Renders Markdown content and lists linked items.
+         * @param {'note' | 'source'} type - The type of item to display.
+         * @param {number} id - The ID of the item to display.
+         */
+        async function displayItem(type, id) {
+            welcomeMessageEl.classList.add('hidden'); // Hide welcome message
+            
+            // Clear previous 'active-item' classes from itemDisplayEl for accurate state tracking
+            const classesToRemove = Array.from(itemDisplayEl.classList).filter(
+                cls => cls.startsWith('active-note-') || cls.startsWith('active-source-')
+            );
+            classesToRemove.forEach(cls => itemDisplayEl.classList.remove(cls));
+
+            itemDisplayEl.classList.remove('hidden'); // Show item display area
+            itemDisplayEl.innerHTML = '<p class="text-center text-gray-500 p-4">Loading item...</p>'; // Loading state
+
+            try {
+                let item;
+                let htmlContent = '';
+
+                if (type === 'note') {
+                    item = await db.notes.get(id);
+                    if (!item) throw new Error(`Note with ID ${id} not found.`);
+                    itemDisplayEl.classList.add('active-note-' + item.id); // Mark as active displayed note
+
+                    // Render Markdown content using marked.js
+                    const renderedContent = item.content ? marked.parse(item.content) : '<p class="text-gray-500 italic">No content.</p>';
+                    // TODO: Sanitize HTML output from marked.parse if user input could be malicious and sanitization isn't default. (Marked has some defaults)
+
+                    htmlContent = `
+                        <div class="flex justify-between items-center pb-2 border-b mb-4">
+                            <h2 class="text-3xl font-bold text-sky-700 break-words">${item.title || 'Untitled Note'}</h2>
+                            <div class="space-x-2 flex-shrink-0 ml-2">
+                                <button onclick="openNoteModalForEdit(${id})" class="text-blue-500 hover:text-blue-700 p-1" title="Edit Note"><i class="fas fa-edit fa-fw"></i></button>
+                                <button onclick="deleteItem('note', ${id})" class="text-red-500 hover:text-red-700 p-1" title="Delete Note"><i class="fas fa-trash fa-fw"></i></button>
+                            </div>
+                        </div>
+                        <div class="prose max-w-none markdown-content">${renderedContent}</div>
+                        <div class="mt-4 pt-4 border-t">
+                            <h4 class="font-semibold text-gray-700 mb-1 text-sm">Metadata:</h4>
+                            <p class="text-xs text-gray-600"><strong>Created:</strong> ${formatDate(item.createdAt)}</p>
+                            <p class="text-xs text-gray-600"><strong>Updated:</strong> ${formatDate(item.updatedAt)}</p>
+                        </div>
+                    `;
+
+                    // Display linked notes
+                    if (item.linkedNoteIds && item.linkedNoteIds.length > 0) {
+                        htmlContent += '<div class="mt-4 pt-4 border-t"><h4 class="font-semibold text-gray-700 mb-2 text-sm">Linked Notes:</h4><ul class="list-disc list-inside space-y-1 text-sm">';
+                        for (const noteId of item.linkedNoteIds) {
+                            const linkedNote = await db.notes.get(noteId); // Fetch linked note details
+                            htmlContent += `<li><a href="#" onclick="event.preventDefault(); displayItem('note', ${noteId})" class="text-sky-600 hover:underline">${linkedNote ? (linkedNote.title || 'Untitled Note') : `Note ID ${noteId} (deleted?)`}</a></li>`;
+                        }
+                        htmlContent += '</ul></div>';
+                    }
+
+                    // Display linked sources
+                    if (item.linkedSourceIds && item.linkedSourceIds.length > 0) {
+                        htmlContent += '<div class="mt-4 pt-4 border-t"><h4 class="font-semibold text-gray-700 mb-2 text-sm">Linked Sources:</h4><ul class="list-disc list-inside space-y-1 text-sm">';
+                        for (const sourceId of item.linkedSourceIds) {
+                            const linkedSource = await db.sources.get(sourceId); // Fetch linked source details
+                            htmlContent += `<li><a href="#" onclick="event.preventDefault(); displayItem('source', ${sourceId})" class="text-emerald-600 hover:underline">${linkedSource ? (linkedSource.title || 'Untitled Source') : `Source ID ${sourceId} (deleted?)`}</a> ${linkedSource ? '('+linkedSource.type+')' : ''}</li>`;
+                        }
+                        htmlContent += '</ul></div>';
+                    }
+                    // TODO: Consider displaying backlinks for notes as well (sources/notes that link TO this note). This would require an additional query.
+
+                } else if (type === 'source') {
+                    item = await db.sources.get(id);
+                    if (!item) throw new Error(`Source with ID ${id} not found.`);
+                    itemDisplayEl.classList.add('active-source-' + item.id); // Mark as active displayed source
+                    
+                    const renderedContent = item.content ? marked.parse(item.content) : '<p class="text-gray-500 italic">No content/description.</p>';
+                    // TODO: Sanitize HTML output from marked.parse.
+
+                    htmlContent = `
+                        <div class="flex justify-between items-center pb-2 border-b mb-4">
+                            <h2 class="text-3xl font-bold text-emerald-700 break-words">${item.title || 'Untitled Source'}</h2>
+                             <div class="space-x-2 flex-shrink-0 ml-2">
+                                <button onclick="openSourceModalForEdit(${id})" class="text-blue-500 hover:text-blue-700 p-1" title="Edit Source"><i class="fas fa-edit fa-fw"></i></button>
+                                <button onclick="deleteItem('source', ${id})" class="text-red-500 hover:text-red-700 p-1" title="Delete Source"><i class="fas fa-trash fa-fw"></i></button>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-600 bg-gray-100 p-2 rounded-md"><strong>Type:</strong> ${item.type}</p>
+                        ${item.location ? `<p class="text-sm text-gray-600 mt-1"><strong>Location:</strong> <a href="${item.location.startsWith('http') ? item.location : '#'}" ${item.location.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''} class="text-blue-500 hover:underline break-all">${item.location}</a></p>` : ''}
+                        <div class="mt-3 prose max-w-none markdown-content">${renderedContent}</div>
+                         <div class="mt-4 pt-4 border-t">
+                            <h4 class="font-semibold text-gray-700 mb-1 text-sm">Metadata:</h4>
+                            <p class="text-xs text-gray-600"><strong>Created:</strong> ${formatDate(item.createdAt)}</p>
+                            <p class="text-xs text-gray-600"><strong>Updated:</strong> ${formatDate(item.updatedAt)}</p>
+                        </div>
+                    `;
+                     // Display notes linking to this source (backlinks)
+                    const referringNotes = await db.notes.where('linkedSourceIds').equals(id).toArray();
+                    if (referringNotes.length > 0) {
+                        htmlContent += '<div class="mt-4 pt-4 border-t"><h4 class="font-semibold text-gray-700 mb-2 text-sm">Referenced by Notes:</h4><ul class="list-disc list-inside space-y-1 text-sm">';
+                        for (const note of referringNotes) {
+                            htmlContent += `<li><a href="#" onclick="event.preventDefault(); displayItem('note', ${note.id})" class="text-sky-600 hover:underline">${note.title || 'Untitled Note'}</a></li>`;
+                        }
+                        htmlContent += '</ul></div>';
+                    }
+                }
+                itemDisplayEl.innerHTML = htmlContent;
+            } catch (error) {
+                console.error(`Error displaying ${type} (ID: ${id}):`, error);
+                itemDisplayEl.innerHTML = `<p class="text-red-500 p-4">Error loading item: ${error.message}</p>`;
+                showMessage(`Failed to load ${type}. Please try again.`, "error");
+            }
+        }
+        
+        // --- CRUD OPERATIONS & FORM HANDLING ---
+
+        /**
+         * Handles the submission of the note form for creating or updating a note.
+         * @param {Event} event - The form submission event.
+         */
+        noteForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+            const id = noteIdInput.value ? parseInt(noteIdInput.value) : null;
+            const title = noteTitleInput.value.trim();
+            const content = noteContentInput.value.trim(); // TODO: Consider if trimming is always desired for Markdown.
+            const now = new Date().toISOString(); // Timestamp for createdAt/updatedAt
+
+            // Collect selected linked note IDs
+            const linkedNoteIds = Array.from(linkToNotesContainer.querySelectorAll('input[type="checkbox"]:checked'))
+                                     .map(cb => parseInt(cb.value));
+            // Collect selected linked source IDs
+            const linkedSourceIds = Array.from(linkToSourcesContainer.querySelectorAll('input[type="checkbox"]:checked'))
+                                     .map(cb => parseInt(cb.value));
+
+            const noteData = {
+                title: title || "Untitled Note", // Default title if empty
+                content,
+                updatedAt: now,
+                linkedNoteIds,
+                linkedSourceIds
+            };
+
+            try {
+                let newOrUpdatedId = id;
+                if (id) { 
+                    // Update existing note
+                    await db.notes.update(id, noteData);
+                    showMessage("Note updated successfully!");
+                } else { 
+                    // Add new note
+                    noteData.createdAt = now; // Set createdAt for new notes
+                    newOrUpdatedId = await db.notes.add(noteData);
+                    showMessage("Note added successfully!");
+                }
+                closeNoteModal();
+                await renderNotesList(); // Refresh sidebar list
+
+                // If the saved note was being displayed or is a new note, refresh/show it.
+                if (itemDisplayEl.classList.contains('active-note-' + newOrUpdatedId) || !id) {
+                     displayItem('note', newOrUpdatedId);
+                }
+            } catch (error) {
+                console.error("Error saving note:", error);
+                showMessage("Error saving note: " + error.message, "error");
+                // Modal is intentionally not closed here on error by default, so user can retry or copy data.
+                // However, per user request, we are closing it.
+                closeNoteModal(); 
+            }
+        });
+
+        /**
+         * Handles the submission of the source form for creating or updating a source.
+         * @param {Event} event - The form submission event.
+         */
+        sourceForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+            const id = sourceIdInput.value ? parseInt(sourceIdInput.value) : null;
+            const title = sourceTitleInput.value.trim();
+            const type = sourceTypeInput.value;
+            const content = sourceContentInput.value.trim();
+            const location = sourceLocationInput.value.trim();
+            const now = new Date().toISOString(); // Timestamp for createdAt/updatedAt
+
+            const sourceData = {
+                title: title || "Untitled Source", // Default title if empty
+                type,
+                content,
+                location,
+                updatedAt: now
+            };
+            // TODO: Add validation for 'location' if it's a URL (e.g., basic format check).
+
+            try {
+                let newOrUpdatedId = id;
+                if (id) { 
+                    // Update existing source
+                    await db.sources.update(id, sourceData);
+                    showMessage("Source updated successfully!");
+                } else { 
+                    // Add new source
+                    sourceData.createdAt = now; // Set createdAt for new sources
+                    newOrUpdatedId = await db.sources.add(sourceData);
+                    showMessage("Source added successfully!");
+                }
+                closeSourceModal();
+                await renderSourcesList(); // Refresh sidebar list
+
+                // If the saved source was being displayed or is a new source, refresh/show it.
+                if (itemDisplayEl.classList.contains('active-source-' + newOrUpdatedId) || !id) {
+                     displayItem('source', newOrUpdatedId);
+                }
+            } catch (error) {
+                console.error("Error saving source:", error);
+                showMessage("Error saving source: " + error.message, "error");
+                closeSourceModal(); // Ensure modal closes even on error, as requested.
+            }
+        });
+        
+        /**
+         * Fetches a note by ID and opens the note modal for editing.
+         * @param {number} id - The ID of the note to edit.
+         */
+        async function openNoteModalForEdit(id) {
+            try {
+                const note = await db.notes.get(id);
+                if (note) {
+                    openNoteModal(note);
+                } else {
+                    showMessage(`Note with ID ${id} not found for editing.`, "error");
+                }
+            } catch (error) {
+                showMessage("Error fetching note for editing: " + error.message, "error");
+            }
+        }
+
+        /**
+         * Fetches a source by ID and opens the source modal for editing.
+         * @param {number} id - The ID of the source to edit.
+         */
+        async function openSourceModalForEdit(id) {
+            try {
+                const source = await db.sources.get(id);
+                if (source) {
+                    openSourceModal(source);
+                } else {
+                    showMessage(`Source with ID ${id} not found for editing.`, "error");
+                }
+            } catch (error) {
+                showMessage("Error fetching source for editing: " + error.message, "error");
+            }
+        }
+
+        /**
+         * Deletes an item (note or source) from the database after confirmation.
+         * Also handles cleaning up links from other items.
+         * @param {'note' | 'source'} type - The type of item to delete.
+         * @param {number} id - The ID of the item to delete.
+         */
+        async function deleteItem(type, id) {
+            const itemName = type === 'note' ? 'note' : 'source';
+            // TODO: Use a custom, non-blocking confirmation modal instead of `confirm()` for better UX.
+            if (!confirm(`Are you sure you want to delete this ${itemName}? This action cannot be undone.`)) {
+                return; // User cancelled
+            }
+
+            try {
+                if (type === 'note') {
+                    await db.notes.delete(id);
+                    // Remove this note's ID from any other notes that link to it
+                    const referringNotes = await db.notes.where('linkedNoteIds').equals(id).toArray();
+                    for (const note of referringNotes) {
+                        const updatedLinkedNoteIds = note.linkedNoteIds.filter(noteId => noteId !== id);
+                        await db.notes.update(note.id, { linkedNoteIds: updatedLinkedNoteIds });
+                        // TODO: Consider if a bulk update would be more efficient for many referring notes.
+                    }
+                } else if (type === 'source') {
+                    await db.sources.delete(id);
+                    // Remove this source's ID from any notes that link to it
+                    const referringNotes = await db.notes.where('linkedSourceIds').equals(id).toArray();
+                    for (const note of referringNotes) {
+                        const updatedLinkedSourceIds = note.linkedSourceIds.filter(sourceId => sourceId !== id);
+                        await db.notes.update(note.id, { linkedSourceIds: updatedLinkedSourceIds });
+                    }
+                }
+                showMessage(`${itemName.charAt(0).toUpperCase() + itemName.slice(1)} deleted successfully!`);
+                
+                // Clear the main display area and show welcome message
+                itemDisplayEl.innerHTML = ''; 
+                const classesToRemove = Array.from(itemDisplayEl.classList).filter(
+                    cls => cls.startsWith('active-note-') || cls.startsWith('active-source-')
+                );
+                classesToRemove.forEach(cls => itemDisplayEl.classList.remove(cls));
+                itemDisplayEl.classList.add('hidden');
+                welcomeMessageEl.classList.remove('hidden');
+
+                // Refresh sidebar lists
+                await renderNotesList();
+                await renderSourcesList();
+            } catch (error) {
+                console.error(`Error deleting ${itemName}:`, error);
+                showMessage(`Error deleting ${itemName}: ` + error.message, "error");
+            }
+        }
+
+        // --- EVENT LISTENERS SETUP ---
+
+        // Listen for clicks on "Add Note" button
+        document.getElementById('addNoteBtn').addEventListener('click', () => openNoteModal());
+        // Listen for clicks on note modal's close and cancel buttons
+        document.getElementById('closeNoteModalBtn').addEventListener('click', closeNoteModal);
+        document.getElementById('cancelNoteBtn').addEventListener('click', closeNoteModal);
+
+        // Listen for clicks on "Add Source" button
+        document.getElementById('addSourceBtn').addEventListener('click', () => openSourceModal());
+        // Listen for clicks on source modal's close and cancel buttons
+        document.getElementById('closeSourceModalBtn').addEventListener('click', closeSourceModal);
+        document.getElementById('cancelSourceBtn').addEventListener('click', closeSourceModal);
+        
+        // Global listener for Escape key to close active modals
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                if (noteModal.classList.contains('active')) {
+                    closeNoteModal();
+                }
+                if (sourceModal.classList.contains('active')) {
+                    closeSourceModal();
+                }
+            }
+        });
+        
+        // Listen for clicks on modal backdrops to close them
+        noteModal.addEventListener('click', (event) => {
+            if (event.target === noteModal) { // Only if backdrop itself is clicked
+                closeNoteModal();
+            }
+        });
+        sourceModal.addEventListener('click', (event) => {
+            if (event.target === sourceModal) { // Only if backdrop itself is clicked
+                closeSourceModal();
+            }
+        });
+
+        // --- INITIALIZATION ---
+
+        /**
+         * Initializes the application by rendering the initial lists of notes and sources.
+         * This function is called once the database is ready.
+         */
+        async function initializeApp() {
+            // TODO: Add a visual loading indicator while initial data is fetched.
+            await renderNotesList();
+            await renderSourcesList();
+            // TODO: Consider displaying the most recently updated item by default, or the last viewed item.
+        }
+
+        // Set up Dexie 'ready' event listener to initialize app once DB is open and ready.
+        // This ensures that DB operations can be performed safely.
+        db.on('ready', initializeApp).catch(error => {
+            // This catch block handles errors during Dexie's initialization (e.g., opening the DB).
+            console.error("Dexie DB failed to open or initialize:", error);
+            showMessage("Critical Error: Could not initialize the database. Your data cannot be saved or loaded.", "error");
+            // Display a prominent error in the main content area if DB fails.
+            contentPaneEl.innerHTML = `<div class="p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
+                <h3 class="font-bold">Database Initialization Failed!</h3>
+                <p>The application cannot function without database access. This might be due to browser restrictions (e.g., private browsing mode with strict tracking protection), insufficient storage, or a corrupted database.</p>
+                <p class="mt-2">Please try the following:</p>
+                <ul class="list-disc list-inside ml-4">
+                    <li>Ensure you are not in a private/incognito window that blocks local storage.</li>
+                    <li>Try clearing site data for this application via your browser settings.</li>
+                    <li>If the problem persists, try a different browser or check your browser's console for more specific error messages.</li>
+                </ul>
+            </div>`;
+            welcomeMessageEl.classList.add('hidden'); // Hide welcome message if error occurs
+        });
+
+    </script>
+</body>
+</html>
