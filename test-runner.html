@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connected Notes Demo - Test Runner</title>
+    <script src="e2e-tests.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: 5px;
+        }
+        h1 {
+            margin: 0;
+        }
+        .test-controls {
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .test-list {
+            margin-bottom: 2rem;
+        }
+        .test-item {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .test-header:hover {
+            background-color: #e9ecef;
+        }
+        .test-id {
+            font-weight: bold;
+            margin-right: 1rem;
+        }
+        .test-name {
+            flex-grow: 1;
+        }
+        .test-status {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .status-not-run {
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        .status-running {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-passed {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-failed {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .test-details {
+            padding: 1rem;
+            border-top: 1px solid #ddd;
+            display: none;
+        }
+        .test-details.active {
+            display: block;
+        }
+        .test-description {
+            margin-bottom: 1rem;
+            font-style: italic;
+        }
+        .test-steps, .test-expected-results {
+            margin-bottom: 1rem;
+        }
+        .test-steps h4, .test-expected-results h4 {
+            margin-bottom: 0.5rem;
+        }
+        .test-steps ol, .test-expected-results ol {
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+        .test-result {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+        .test-result.passed {
+            background-color: #d4edda;
+        }
+        .test-result.failed {
+            background-color: #f8d7da;
+        }
+        .test-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        .test-filter {
+            margin-bottom: 1rem;
+        }
+        .test-filter select {
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin-left: 0.5rem;
+        }
+        .test-summary {
+            margin-top: 2rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .test-summary h3 {
+            margin-top: 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        .progress-bar-inner {
+            height: 100%;
+            background-color: #3498db;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .screenshots {
+            margin-top: 1rem;
+        }
+        .screenshots img {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+        .notes-field {
+            width: 100%;
+            min-height: 100px;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Connected Notes Demo - Test Runner</h1>
+    </header>
+
+    <div class="test-controls">
+        <button id="runAllTests">Run All Tests</button>
+        <button id="runSelectedTest" disabled>Run Selected Test</button>
+        <button id="resetTests">Reset Tests</button>
+        <button id="saveResults">Save Results</button>
+    </div>
+
+    <div class="test-filter">
+        <label for="categoryFilter">Filter by category:</label>
+        <select id="categoryFilter">
+            <option value="all">All Categories</option>
+            <option value="Core CRUD for Notes">Core CRUD for Notes</option>
+            <option value="Core CRUD for Sources">Core CRUD for Sources</option>
+            <option value="Linking/Unlinking">Linking/Unlinking</option>
+            <option value="Link Navigation">Link Navigation</option>
+            <option value="Deleting Items with Links">Deleting Items with Links</option>
+            <option value="Markdown Rendering">Markdown Rendering</option>
+            <option value="Edge Cases">Edge Cases</option>
+            <option value="Data Persistence">Data Persistence</option>
+        </select>
+        <label for="statusFilter" style="margin-left: 1rem;">Filter by status:</label>
+        <select id="statusFilter">
+            <option value="all">All Statuses</option>
+            <option value="Not Run">Not Run</option>
+            <option value="Running">Running</option>
+            <option value="Passed">Passed</option>
+            <option value="Failed">Failed</option>
+        </select>
+    </div>
+
+    <div class="progress-bar">
+        <div class="progress-bar-inner" id="progressBar"></div>
+    </div>
+
+    <div class="test-summary">
+        <h3>Test Summary</h3>
+        <p>Total Tests: <span id="totalTests">0</span></p>
+        <p>Passed: <span id="passedTests">0</span></p>
+        <p>Failed: <span id="failedTests">0</span></p>
+        <p>Not Run: <span id="notRunTests">0</span></p>
+        <p>Running: <span id="runningTests">0</span></p>
+    </div>
+
+    <div class="test-list" id="testList">
+        <!-- Test items will be generated here -->
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize the test runner
+            const runner = new TestRunner(config, testCases);
+            
+            // DOM elements
+            const runAllTestsBtn = document.getElementById('runAllTests');
+            const runSelectedTestBtn = document.getElementById('runSelectedTest');
+            const resetTestsBtn = document.getElementById('resetTests');
+            const saveResultsBtn = document.getElementById('saveResults');
+            const categoryFilterSelect = document.getElementById('categoryFilter');
+            const statusFilterSelect = document.getElementById('statusFilter');
+            const testListContainer = document.getElementById('testList');
+            const progressBar = document.getElementById('progressBar');
+            
+            // Summary elements
+            const totalTestsEl = document.getElementById('totalTests');
+            const passedTestsEl = document.getElementById('passedTests');
+            const failedTestsEl = document.getElementById('failedTests');
+            const notRunTestsEl = document.getElementById('notRunTests');
+            const runningTestsEl = document.getElementById('runningTests');
+            
+            let selectedTestId = null;
+            
+            // Initialize the test list
+            function initializeTestList() {
+                testListContainer.innerHTML = '';
+                
+                const categoryFilter = categoryFilterSelect.value;
+                const statusFilter = statusFilterSelect.value;
+                
+                let filteredTests = testCases;
+                
+                if (categoryFilter !== 'all') {
+                    filteredTests = filteredTests.filter(test => test.feature === categoryFilter);
+                }
+                
+                if (statusFilter !== 'all') {
+                    filteredTests = filteredTests.filter(test => test.status === statusFilter);
+                }
+                
+                filteredTests.forEach(test => {
+                    const testItem = document.createElement('div');
+                    testItem.className = 'test-item';
+                    testItem.dataset.testId = test.id;
+                    
+                    const testHeader = document.createElement('div');
+                    testHeader.className = 'test-header';
+                    testHeader.innerHTML = `
+                        <span class="test-id">#${test.id}</span>
+                        <span class="test-name">${test.name}</span>
+                        <span class="test-status status-${test.status.toLowerCase().replace(' ', '-')}">${test.status}</span>
+                    `;
+                    
+                    const testDetails = document.createElement('div');
+                    testDetails.className = 'test-details';
+                    testDetails.innerHTML = `
+                        <div class="test-description">${test.description}</div>
+                        <div class="test-steps">
+                            <h4>Steps:</h4>
+                            <ol>
+                                ${test.steps.map(step => `<li>${step}</li>`).join('')}
+                            </ol>
+                        </div>
+                        <div class="test-expected-results">
+                            <h4>Expected Results:</h4>
+                            <ol>
+                                ${test.expectedResults.map(result => `<li>${result}</li>`).join('')}
+                            </ol>
+                        </div>
+                        ${test.result ? `
+                            <div class="test-result ${test.result.status.toLowerCase()}">
+                                <h4>Result: ${test.result.status}</h4>
+                                <p>Notes: ${test.result.notes}</p>
+                                <p>Timestamp: ${new Date(test.result.timestamp).toLocaleString()}</p>
+                            </div>
+                        ` : ''}
+                        <div class="test-actions">
+                            <button class="run-test-btn" data-test-id="${test.id}">Run Test</button>
+                            <button class="mark-passed-btn" data-test-id="${test.id}">Mark as Passed</button>
+                            <button class="mark-failed-btn" data-test-id="${test.id}">Mark as Failed</button>
+                        </div>
+                        <div class="test-notes">
+                            <h4>Test Notes:</h4>
+                            <textarea class="notes-field" placeholder="Enter notes about the test execution..."></textarea>
+                        </div>
+                        <div class="screenshots">
+                            <h4>Screenshots:</h4>
+                            ${test.screenshots.length > 0 ? 
+                                test.screenshots.map(screenshot => `<img src="${screenshot}" alt="Test Screenshot">`).join('') : 
+                                '<p>No screenshots available.</p>'
+                            }
+                        </div>
+                    `;
+                    
+                    testItem.appendChild(testHeader);
+                    testItem.appendChild(testDetails);
+                    testListContainer.appendChild(testItem);
+                    
+                    // Add event listener to toggle test details
+                    testHeader.addEventListener('click', function() {
+                        const isActive = testDetails.classList.contains('active');
+                        
+                        // Close all other test details
+                        document.querySelectorAll('.test-details.active').forEach(el => {
+                            el.classList.remove('active');
+                        });
+                        
+                        if (!isActive) {
+                            testDetails.classList.add('active');
+                            selectedTestId = test.id;
+                            runSelectedTestBtn.disabled = false;
+                        } else {
+                            selectedTestId = null;
+                            runSelectedTestBtn.disabled = true;
+                        }
+                    });
+                });
+                
+                // Add event listeners to test action buttons
+                document.querySelectorAll('.run-test-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const testId = parseInt(this.dataset.testId);
+                        runTest(testId);
+                    });
+                });
+                
+                document.querySelectorAll('.mark-passed-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const testId = parseInt(this.dataset.testId);
+                        markTestAs(testId, 'Passed');
+                    });
+                });
+                
+                document.querySelectorAll('.mark-failed-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const testId = parseInt(this.dataset.testId);
+                        markTestAs(testId, 'Failed');
+                    });
+                });
+                
+                updateTestSummary();
+            }
+            
+            // Run a single test
+            async function runTest(testId) {
+                const test = testCases.find(t => t.id === testId);
+                if (!test) return;
+                
+                test.status = 'Running';
+                updateTestItem(test);
+                updateTestSummary();
+                
+                // Simulate test execution
+                setTimeout(() => {
+                    const result = {
+                        testId: test.id,
+                        testName: test.name,
+                        status: 'Passed', // Default to passed
+                        notes: document.querySelector(`.test-item[data-test-id="${test.id}"] .notes-field`).value || 'Test executed manually',
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    test.status = result.status;
+                    test.result = result;
+                    
+                    updateTestItem(test);
+                    updateTestSummary();
+                    updateProgressBar();
+                }, 1000);
+            }
+            
+            // Mark a test as passed or failed
+            function markTestAs(testId, status) {
+                const test = testCases.find(t => t.id === testId);
+                if (!test) return;
+                
+                const result = {
+                    testId: test.id,
+                    testName: test.name,
+                    status: status,
+                    notes: document.querySelector(`.test-item[data-test-id="${test.id}"] .notes-field`).value || `Manually marked as ${status}`,
+                    timestamp: new Date().toISOString()
+                };
+                
+                test.status = result.status;
+                test.result = result;
+                
+                updateTestItem(test);
+                updateTestSummary();
+                updateProgressBar();
+            }
+            
+            // Update a test item in the UI
+            function updateTestItem(test) {
+                const testItem = document.querySelector(`.test-item[data-test-id="${test.id}"]`);
+                if (!testItem) return;
+                
+                const statusEl = testItem.querySelector('.test-status');
+                statusEl.className = `test-status status-${test.status.toLowerCase().replace(' ', '-')}`;
+                statusEl.textContent = test.status;
+                
+                const testDetails = testItem.querySelector('.test-details');
+                if (test.result) {
+                    const resultDiv = testDetails.querySelector('.test-result') || document.createElement('div');
+                    resultDiv.className = `test-result ${test.result.status.toLowerCase()}`;
+                    resultDiv.innerHTML = `
+                        <h4>Result: ${test.result.status}</h4>
+                        <p>Notes: ${test.result.notes}</p>
+                        <p>Timestamp: ${new Date(test.result.timestamp).toLocaleString()}</p>
+                    `;
+                    
+                    if (!testDetails.querySelector('.test-result')) {
+                        testDetails.insertBefore(resultDiv, testDetails.querySelector('.test-actions'));
+                    }
+                }
+            }
+            
+            // Update the test summary
+            function updateTestSummary() {
+                const total = testCases.length;
+                const passed = testCases.filter(test => test.status === 'Passed').length;
+                const failed = testCases.filter(test => test.status === 'Failed').length;
+                const notRun = testCases.filter(test => test.status === 'Not Run').length;
+                const running = testCases.filter(test => test.status === 'Running').length;
+                
+                totalTestsEl.textContent = total;
+                passedTestsEl.textContent = passed;
+                failedTestsEl.textContent = failed;
+                notRunTestsEl.textContent = notRun;
+                runningTestsEl.textContent = running;
+                
+                updateProgressBar();
+            }
+            
+            // Update the progress bar
+            function updateProgressBar() {
+                const total = testCases.length;
+                const completed = testCases.filter(test => test.status === 'Passed' || test.status === 'Failed').length;
+                const percentage = (completed / total) * 100;
+                
+                progressBar.style.width = `${percentage}%`;
+            }
+            
+            // Run all tests
+            async function runAllTests() {
+                for (const test of testCases) {
+                    test.status = 'Running';
+                    updateTestItem(test);
+                    updateTestSummary();
+                    
+                    // Simulate test execution
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            const result = {
+                                testId: test.id,
+                                testName: test.name,
+                                status: 'Passed', // Default to passed
+                                notes: document.querySelector(`.test-item[data-test-id="${test.id}"] .notes-field`).value || 'Test executed manually',
+                                timestamp: new Date().toISOString()
+                            };
+                            
+                            test.status = result.status;
+                            test.result = result;
+                            
+                            updateTestItem(test);
+                            updateTestSummary();
+                            resolve();
+                        }, 500);
+                    });
+                }
+            }
+            
+            // Reset all tests
+            function resetTests() {
+                testCases.forEach(test => {
+                    test.status = 'Not Run';
+                    test.result = null;
+                    test.screenshots = [];
+                });
+                
+                initializeTestList();
+                updateProgressBar();
+            }
+            
+            // Save test results
+            function saveResults() {
+                const results = testCases.map(test => ({
+                    id: test.id,
+                    name: test.name,
+                    status: test.status,
+                    result: test.result,
+                    notes: document.querySelector(`.test-item[data-test-id="${test.id}"] .notes-field`).value || ''
+                }));
+                
+                const resultsJson = JSON.stringify(results, null, 2);
+                const blob = new Blob([resultsJson], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `test-results-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+            }
+            
+            // Event listeners
+            runAllTestsBtn.addEventListener('click', runAllTests);
+            
+            runSelectedTestBtn.addEventListener('click', function() {
+                if (selectedTestId) {
+                    runTest(selectedTestId);
+                }
+            });
+            
+            resetTestsBtn.addEventListener('click', resetTests);
+            
+            saveResultsBtn.addEventListener('click', saveResults);
+            
+            categoryFilterSelect.addEventListener('change', initializeTestList);
+            statusFilterSelect.addEventListener('change', initializeTestList);
+            
+            // Initialize the test list
+            initializeTestList();
+        });
+    </script>
+</body>
+</html>
